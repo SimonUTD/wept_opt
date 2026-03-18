@@ -241,24 +241,87 @@
         var t = JSON.parse(JSON.stringify(e));
         t.to = "backgroundjs", t.comefrom = "webframe", t.command = "COMMAND_FROM_ASJS", t.appid = a, t.appname = u, t.apphash = s, t.webviewID = l, t.__id = g, g++, window.parent.postMessage(t, "*")
       },
-      _ = function(e) {
+      _ = function(e, t) {
+        return {
+          command: "GET_ASSDK_RES",
+          ext: e,
+          msg: t
+        }
+      },
+      y = function(e, t) {
+        var n = {
+          errMsg: e.sdkName + ":ok"
+        };
+        if (t)
+          for (var o in t) n[o] = t[o];
+        return _(e, n)
+      },
+      b = function(e, t) {
+        return _(e, {
+          errMsg: e.sdkName + ":fail" + (t ? " " + t : "")
+        })
+      },
+      m = function(e) {
+        try {
+          var t = localStorage.getItem(e);
+          return t ? JSON.parse(t) : {}
+        } catch (e) {
+          return {}
+        }
+      },
+      w = function(e) {
+        var t = e.sdkName,
+          n = e.args || {},
+          o = __wxConfig.directory || "__wept__",
+          r = o,
+          i = o + "_type",
+          s = m(r),
+          a = m(i);
+        if ("setStorageSync" === t) return null == n.key || null == n.data ? b(e) : (s[n.key] = n.data, a[n.key] = n.dataType, localStorage.setItem(r, JSON.stringify(s)), localStorage.setItem(i, JSON.stringify(a)), y(e));
+        if ("getStorageSync" === t) return null == n.key || "" === n.key ? b(e) : y(e, {
+          data: s[n.key],
+          dataType: a[n.key]
+        });
+        if ("removeStorageSync" === t) return null == n.key || "" === n.key ? b(e) : (delete s[n.key], delete a[n.key], localStorage.setItem(r, JSON.stringify(s)), localStorage.setItem(i, JSON.stringify(a)), y(e));
+        if ("clearStorageSync" === t) return localStorage.removeItem(r), localStorage.removeItem(i), y(e);
+        if ("getStorageInfoSync" === t) {
+          var u = 0;
+          return Object.keys(localStorage).forEach(function(e) {
+            var t = localStorage.getItem(e) || "";
+            u += t.length * 2 / 1024
+          }), y(e, {
+            keys: Object.keys(s),
+            limitSize: 5120,
+            currentSize: Math.ceil(u)
+          })
+        }
+        return "getSystemInfoSync" === t || "getSystemInfo" === t ? y(e, {
+          model: /iPhone/.test(navigator.userAgent) ? "iPhone6" : "Android",
+          pixelRatio: window.devicePixelRatio || 1,
+          windowWidth: window.innerWidth || 0,
+          windowHeight: window.innerHeight || 0,
+          language: window.navigator.userLanguage || window.navigator.language,
+          platform: "wept",
+          version: "6.3.9"
+        }) : b(e, "not supported")
+      },
+      S = function(e) {
         e.command = "COMMAND_FROM_ASJS", e.appid = a, e.appname = u, e.apphash = s, e.webviewID = l;
-        var t = "____sdk____" + JSON.stringify(e),
-          n = prompt(t);
-        n = JSON.parse(n), delete n.to, p(n)
+        var t = w(e);
+        delete t.to, p(t)
       };
     window._____sendMsgToNW = h;
-    var m = function(e) {
+    var O = function(e) {
         e.to = "contentscript", e.comefrom = "webframe", e.webviewID = l, window.parent.postMessage(e, "*")
       },
-      w = function(e, t, n) {
+      T = function(e, t, n) {
         var o = (0, i.isSyncSDK)(e),
           r = {
             sdkName: e,
             args: t,
             callbackID: n
           };
-        o ? _(r) : h(r)
+        o ? S(r) : h(r)
       };
     window.addEventListener("message", function(e) {
       var t = e.data,
@@ -268,10 +331,10 @@
       f.forEach(function(e) {
         p(e)
       }), f = []
-    }), m({
+    }), O({
       command: "SHAKE_HANDS"
     }), t["default"] = {
-      brigeToNW: w,
+      brigeToNW: T,
       sendMsgToNW: h,
       registerCallback: v
     }
