@@ -86,8 +86,111 @@
 	__webpack_require__(/*! ./message */ 124);
 	__webpack_require__(/*! ./polyfill */ 128);
 	
-	_nprogress2.default.start();
-	util.createFrame('service', '/appservice', true);
+		_nprogress2.default.start();
+		var serviceFrame = util.createFrame('service', '/appservice', true);
+		Object.defineProperty(serviceFrame.contentWindow, 'prompt', {
+		  get: function () {
+		    return function (str) {
+		      if (typeof str !== 'string' || str.indexOf('____sdk____') !== 0) {
+		        console.warn('Invalid prompt ' + str);
+		        return JSON.stringify({
+		          errMsg: 'prompt:fail invalid request'
+		        });
+		      }
+		      var data = JSON.parse(str.replace(/^____sdk____/, ''));
+		      var sdkName = data.sdkName;
+		      var args = data.args || {};
+		      var directory = window.__wxConfig__ && window.__wxConfig__.directory || '__wept__';
+		      var dataKey = directory;
+		      var typeKey = directory + '_type';
+		      var values = {};
+		      var types = {};
+		      try {
+		        values = JSON.parse(localStorage.getItem(dataKey) || '{}');
+		      } catch (e) {
+		        values = {};
+		      }
+		      try {
+		        types = JSON.parse(localStorage.getItem(typeKey) || '{}');
+		      } catch (e) {
+		        types = {};
+		      }
+		      var ok = function (extra) {
+		        var res = {
+		          errMsg: sdkName + ':ok'
+		        };
+		        if (extra && typeof extra === 'object') {
+		          for (var k in extra) {
+		            res[k] = extra[k];
+		          }
+		        }
+		        return JSON.stringify(res);
+		      };
+		      var fail = function (msg) {
+		        return JSON.stringify({
+		          errMsg: sdkName + ':fail' + (msg ? ' ' + msg : '')
+		        });
+		      };
+		      var currentSize = function () {
+		        var total = 0;
+		        for (var key in localStorage) {
+		          if (Object.prototype.hasOwnProperty.call(localStorage, key) && typeof localStorage[key] === 'string') {
+		            total += localStorage[key].length * 2 / 1024;
+		          }
+		        }
+		        return Math.ceil(total);
+		      };
+		      if (sdkName === 'setStorageSync') {
+		        if (args.key == null || args.data == null) return fail();
+		        values[args.key] = args.data;
+		        types[args.key] = args.dataType;
+		        localStorage.setItem(dataKey, JSON.stringify(values));
+		        localStorage.setItem(typeKey, JSON.stringify(types));
+		        return ok();
+		      }
+		      if (sdkName === 'getStorageSync') {
+		        if (args.key == null || args.key === '') return fail();
+		        return ok({
+		          data: values[args.key],
+		          dataType: types[args.key]
+		        });
+		      }
+		      if (sdkName === 'removeStorageSync') {
+		        if (args.key == null || args.key === '') return fail();
+		        delete values[args.key];
+		        delete types[args.key];
+		        localStorage.setItem(dataKey, JSON.stringify(values));
+		        localStorage.setItem(typeKey, JSON.stringify(types));
+		        return ok();
+		      }
+		      if (sdkName === 'clearStorageSync') {
+		        localStorage.removeItem(dataKey);
+		        localStorage.removeItem(typeKey);
+		        return ok();
+		      }
+		      if (sdkName === 'getStorageInfoSync') {
+		        return ok({
+		          keys: Object.keys(values),
+		          limitSize: 5 * 1024,
+		          currentSize: currentSize()
+		        });
+		      }
+		      if (sdkName === 'getSystemInfo' || sdkName === 'getSystemInfoSync') {
+		        return ok({
+		          model: /iPhone/.test(navigator.userAgent) ? 'iPhone6' : 'Android',
+		          pixelRatio: window.devicePixelRatio || 1,
+		          windowWidth: window.innerWidth || 0,
+		          windowHeight: window.innerHeight || 0,
+		          language: window.navigator.userLanguage || window.navigator.language,
+		          platform: 'wept',
+		          version: '6.3.9'
+		        });
+		      }
+		      console.warn('Method ' + sdkName + ' not implemented for prompt bridge');
+		      return fail('not supported');
+		    };
+		  }
+		});
 	
 	_header2.default.on('back', function () {
 	  (0, _viewManage.navigateBack)();
