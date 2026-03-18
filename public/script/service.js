@@ -870,6 +870,9 @@ var Reporter = function(e) {
         getNetworkType: function(e) {
           (0, u.invokeMethod)("getNetworkType", e)
         },
+        onNetworkStatusChange: function(e) {
+          (0, u.onMethod)("onNetworkStatusChange", Reporter.surroundThirdByTryCatch(e, "at onNetworkStatusChange callback function"))
+        },
         getSystemInfo: function(e) {
           var t = (0, f.getPlatform)();
           (0, u.invokeMethod)("getSystemInfo", e, {
