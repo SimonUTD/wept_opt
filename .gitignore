@@ -1,8 +1,11 @@
 .DS_Store
 npm-debug.log
+pnpm-debug.log
 Thumbs.db
 node_modules/
+.pnpm-store/
 *.map
 .official
 *.diff
 .idea
+appletProjectCache/

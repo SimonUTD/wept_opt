@@ -40,13 +40,24 @@ WEPT 是一个微信小程序实时开发环境，它的目标是为小程序开
 ## 安装 & 使用方法
 ### Web
 
-    npm i wept -g
+推荐直接通过 Git 安装当前仓库版本（适合需要最新修复的场景）：
 
-如安装较慢，可使用 [cnpm](http://npm.taobao.org/)
+```bash
+git clone https://github.com/SimonUTD/wept_opt.git
+cd wept_opt
+pnpm install
+pnpm add -g .
+```
 
-到小程序项目根目录下执行命令：
+如果本机已经有旧版全局 `wept`，上面的 `pnpm add -g .` 会直接覆盖。
 
-    cd case && wept
+到小程序项目根目录下执行命令（无参数默认等价于 `wept web`）：
+
+```bash
+wept
+# 或
+wept web
+```
 
 使用 Chrome 访问 `http://localhost:3000` 打开开发者工具后启用移动页面调试模式（Mac 下快捷键为 `⌘ ⇧ M`）
 

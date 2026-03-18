@@ -2,26 +2,13 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const net = require('net');
 const yargs = require('yargs');
-const chalk = require('chalk');
 const logs = require('../lib/logs');
-const WeptApplet=require('../lib/build/WeptApplet')
-
 
 const clearConsole = () => {
   process.stdout.write(/^win/.test(process.platform) ? '\x1B[2J\x1B[0f' : '\x1B[2J\x1B[3J\x1B[H');
 }
-
-const checkCompileProject = (compiledPath) => {
-  if (!compiledPath) throw new Error('小程序编译后项目路径不能为空');
-  if (!path.isAbsolute(compiledPath)) throw new Error('小程序编译后项目路径必须为绝对路径');
-  const parent = path.dirname(compiledPath);
-  try {
-    fs.accessSync(parent, fs.constants.R_OK | fs.constants.W_OK);
-  } catch (err) {
-    throw new Error(`小程序编译后项目读写权限缺失 [${compiledPath}]`);
-  }
-};
 
 const checkAppletProject = (projectPath) => {
   if (!projectPath) throw new Error('不存在此小程序项目');
@@ -35,28 +22,40 @@ const checkAppletProject = (projectPath) => {
   if (!fs.existsSync(appJsPath)) throw new Error(`小程序项目 [${appJsonPath}] 不存在app.js文件`);
 };
 
+const getAvailablePort = (port) => {
+  return new Promise((resolve) => {
+    const probe = net.createServer();
+    probe.once('error', () => {
+      resolve(getAvailablePort(port + 1));
+    });
+    probe.once('listening', () => {
+      probe.close(() => resolve(port));
+    });
+    probe.listen(port);
+  });
+};
+
 const runWeb = async () => {
   let appletSources = path.resolve(process.cwd());
   checkAppletProject(appletSources);
+  const server = require('../lib/server');
 
-  const cacheFolder = path.resolve(__dirname, '..', 'appletProjectCache');
-  if (!fs.existsSync(cacheFolder)) {
-    fs.mkdirSync(cacheFolder, { recursive: true });
-  }
-
-  let compiledPath = path.resolve(cacheFolder, path.basename(appletSources));
-  checkCompileProject(compiledPath);
-
-  const weptApplet = new WeptApplet({appletSources, compiledPath});
-  await weptApplet.run();
-
-
+  const port = await getAvailablePort(3000);
+  await new Promise((resolve, reject) => {
+    const onError = (err) => reject(err);
+    server.once('error', onError);
+    server.listen(port, () => {
+      server.removeListener('error', onError);
+      logs.success(`web 运行成功，地址：http://localhost:${port}`);
+      resolve();
+    });
+  });
 };
 
 const weptCli = async () => {
   clearConsole()
   yargs.usage('Usage: $0 <command> [options]')
-    .command('web', '在浏览器中运行小程序应用', (yargs) => {
+    .command(['web', '$0'], '在浏览器中运行小程序应用', (yargs) => {
       return yargs
         .usage('')
     }, async (args) => {
@@ -71,7 +70,6 @@ const weptCli = async () => {
       // TODO 
       // 实现打包在ios环境中运行
     })
-    .demandCommand(1, chalk.red('[ERROR]: 需执行一项wept web或wept ios 命令'))
     .parse();
 };
 
