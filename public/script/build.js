@@ -87,110 +87,7 @@
 	__webpack_require__(/*! ./polyfill */ 128);
 	
 		_nprogress2.default.start();
-		var serviceFrame = util.createFrame('service', '/appservice', true);
-		Object.defineProperty(serviceFrame.contentWindow, 'prompt', {
-		  get: function () {
-		    return function (str) {
-		      if (typeof str !== 'string' || str.indexOf('____sdk____') !== 0) {
-		        console.warn('Invalid prompt ' + str);
-		        return JSON.stringify({
-		          errMsg: 'prompt:fail invalid request'
-		        });
-		      }
-		      var data = JSON.parse(str.replace(/^____sdk____/, ''));
-		      var sdkName = data.sdkName;
-		      var args = data.args || {};
-		      var directory = window.__wxConfig__ && window.__wxConfig__.directory || '__wept__';
-		      var dataKey = directory;
-		      var typeKey = directory + '_type';
-		      var values = {};
-		      var types = {};
-		      try {
-		        values = JSON.parse(localStorage.getItem(dataKey) || '{}');
-		      } catch (e) {
-		        values = {};
-		      }
-		      try {
-		        types = JSON.parse(localStorage.getItem(typeKey) || '{}');
-		      } catch (e) {
-		        types = {};
-		      }
-		      var ok = function (extra) {
-		        var res = {
-		          errMsg: sdkName + ':ok'
-		        };
-		        if (extra && typeof extra === 'object') {
-		          for (var k in extra) {
-		            res[k] = extra[k];
-		          }
-		        }
-		        return JSON.stringify(res);
-		      };
-		      var fail = function (msg) {
-		        return JSON.stringify({
-		          errMsg: sdkName + ':fail' + (msg ? ' ' + msg : '')
-		        });
-		      };
-		      var currentSize = function () {
-		        var total = 0;
-		        for (var key in localStorage) {
-		          if (Object.prototype.hasOwnProperty.call(localStorage, key) && typeof localStorage[key] === 'string') {
-		            total += localStorage[key].length * 2 / 1024;
-		          }
-		        }
-		        return Math.ceil(total);
-		      };
-		      if (sdkName === 'setStorageSync') {
-		        if (args.key == null || args.data == null) return fail();
-		        values[args.key] = args.data;
-		        types[args.key] = args.dataType;
-		        localStorage.setItem(dataKey, JSON.stringify(values));
-		        localStorage.setItem(typeKey, JSON.stringify(types));
-		        return ok();
-		      }
-		      if (sdkName === 'getStorageSync') {
-		        if (args.key == null || args.key === '') return fail();
-		        return ok({
-		          data: values[args.key],
-		          dataType: types[args.key]
-		        });
-		      }
-		      if (sdkName === 'removeStorageSync') {
-		        if (args.key == null || args.key === '') return fail();
-		        delete values[args.key];
-		        delete types[args.key];
-		        localStorage.setItem(dataKey, JSON.stringify(values));
-		        localStorage.setItem(typeKey, JSON.stringify(types));
-		        return ok();
-		      }
-		      if (sdkName === 'clearStorageSync') {
-		        localStorage.removeItem(dataKey);
-		        localStorage.removeItem(typeKey);
-		        return ok();
-		      }
-		      if (sdkName === 'getStorageInfoSync') {
-		        return ok({
-		          keys: Object.keys(values),
-		          limitSize: 5 * 1024,
-		          currentSize: currentSize()
-		        });
-		      }
-		      if (sdkName === 'getSystemInfo' || sdkName === 'getSystemInfoSync') {
-		        return ok({
-		          model: /iPhone/.test(navigator.userAgent) ? 'iPhone6' : 'Android',
-		          pixelRatio: window.devicePixelRatio || 1,
-		          windowWidth: window.innerWidth || 0,
-		          windowHeight: window.innerHeight || 0,
-		          language: window.navigator.userLanguage || window.navigator.language,
-		          platform: 'wept',
-		          version: '6.3.9'
-		        });
-		      }
-		      console.warn('Method ' + sdkName + ' not implemented for prompt bridge');
-		      return fail('not supported');
-		    };
-		  }
-		});
+		util.createFrame('service', '/appservice', true);
 	
 	_header2.default.on('back', function () {
 	  (0, _viewManage.navigateBack)();
@@ -767,7 +664,153 @@
 	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 	
-	var id = 0;
+		var id = 0;
+		var SYNC_STORAGE_LIMIT_SIZE = 5 * 1024;
+		var SDK_PROMPT_PREFIX = '____sdk____';
+
+		function readJSONStorage(key) {
+		  var fallback = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
+
+		  try {
+		    var raw = localStorage.getItem(key);
+		    return raw ? JSON.parse(raw) : fallback;
+		  } catch (e) {
+		    return fallback;
+		  }
+		}
+
+		function toSyncResult(payload, msg) {
+		  return JSON.stringify({
+		    command: 'GET_ASSDK_RES',
+		    ext: payload,
+		    msg: msg
+		  });
+		}
+
+		function sdkSuccess(payload) {
+		  var extra = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
+		  var msg = {
+		    errMsg: payload.sdkName + ':ok'
+		  };
+		  for (var key in extra) {
+		    msg[key] = extra[key];
+		  }
+		  return toSyncResult(payload, msg);
+		}
+
+		function sdkFail(payload) {
+		  var reason = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : '';
+
+		  return toSyncResult(payload, {
+		    errMsg: payload.sdkName + ':fail' + (reason ? ' ' + reason : '')
+		  });
+		}
+
+		function getSystemInfo() {
+		  return {
+		    model: /iPhone/.test(navigator.userAgent) ? 'iPhone6' : 'Android',
+		    pixelRatio: window.devicePixelRatio || 1,
+		    windowWidth: window.innerWidth || 0,
+		    windowHeight: window.innerHeight || 0,
+		    language: window.navigator.userLanguage || window.navigator.language,
+		    platform: 'wept',
+		    version: '6.3.9'
+		  };
+		}
+
+		function processSyncSdk(payload) {
+		  var sdkName = payload.sdkName;
+		  var args = payload.args || {};
+		  var directory = window.__wxConfig__ && window.__wxConfig__.directory || '__wept__';
+		  var dataKey = directory;
+		  var typeKey = directory + '_type';
+		  var values = readJSONStorage(dataKey);
+		  var types = readJSONStorage(typeKey);
+
+		  if (sdkName === 'setStorageSync') {
+		    if (args.key == null || args.data == null) return sdkFail(payload);
+		    values[args.key] = args.data;
+		    types[args.key] = args.dataType;
+		    localStorage.setItem(dataKey, JSON.stringify(values));
+		    localStorage.setItem(typeKey, JSON.stringify(types));
+		    return sdkSuccess(payload);
+		  }
+
+		  if (sdkName === 'getStorageSync') {
+		    if (args.key == null || args.key === '') return sdkFail(payload);
+		    return sdkSuccess(payload, {
+		      data: values[args.key],
+		      dataType: types[args.key]
+		    });
+		  }
+
+		  if (sdkName === 'removeStorageSync') {
+		    if (args.key == null || args.key === '') return sdkFail(payload);
+		    delete values[args.key];
+		    delete types[args.key];
+		    localStorage.setItem(dataKey, JSON.stringify(values));
+		    localStorage.setItem(typeKey, JSON.stringify(types));
+		    return sdkSuccess(payload);
+		  }
+
+		  if (sdkName === 'clearStorageSync') {
+		    localStorage.removeItem(dataKey);
+		    localStorage.removeItem(typeKey);
+		    return sdkSuccess(payload);
+		  }
+
+		  if (sdkName === 'getStorageInfoSync') {
+		    var currentSize = 0;
+		    Object.keys(localStorage).forEach(function (key) {
+		      var value = localStorage.getItem(key) || '';
+		      currentSize += value.length * 2 / 1024;
+		    });
+		    return sdkSuccess(payload, {
+		      keys: Object.keys(values),
+		      limitSize: SYNC_STORAGE_LIMIT_SIZE,
+		      currentSize: Math.ceil(currentSize)
+		    });
+		  }
+
+		  if (sdkName === 'getSystemInfoSync' || sdkName === 'getSystemInfo') {
+		    return sdkSuccess(payload, getSystemInfo());
+		  }
+
+		  return sdkFail(payload, 'not supported');
+		}
+
+		function installSyncPromptBridge(iframeEl) {
+		  try {
+		    Object.defineProperty(iframeEl.contentWindow, 'prompt', {
+		      configurable: true,
+		      get: function get() {
+		        return function (request) {
+		          if (typeof request !== 'string' || request.indexOf(SDK_PROMPT_PREFIX) !== 0) {
+		            return toSyncResult({
+		              callbackID: -1,
+		              sdkName: 'prompt'
+		            }, {
+		              errMsg: 'prompt:fail invalid request'
+		            });
+		          }
+		          try {
+		            var payload = JSON.parse(request.replace(/^____sdk____/, ''));
+		            return processSyncSdk(payload);
+		          } catch (e) {
+		            return toSyncResult({
+		              callbackID: -1,
+		              sdkName: 'prompt'
+		            }, {
+		              errMsg: 'prompt:fail invalid json'
+		            });
+		          }
+		        };
+		      }
+		    });
+		  } catch (e) {
+		    console.warn('Failed to install prompt bridge for ' + iframeEl.id + ': ' + e.message);
+		  }
+		}
 	function uid() {
 	  return id++;
 	}
@@ -781,8 +824,8 @@
 	  document.head.appendChild(ss);
 	}
 	
-	function createFrame(id, src, hidden) {
-	  var parent = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : document.body;
+		function createFrame(id, src, hidden) {
+		  var parent = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : document.body;
 	
 	  var el = document.createElement('iframe');
 	  el.setAttribute('src', src);
@@ -792,12 +835,13 @@
 	  el.setAttribute('frameborder', "0");
 	  el.setAttribute('width', hidden ? "0" : "100%");
 	  el.setAttribute('height', hidden ? "0" : "" + (document.body.clientHeight - 42));
-	  if (hidden) {
-	    el.setAttribute('style', 'width:0;height:0;border:0; display:none;');
-	  }
-	  parent.appendChild(el);
-	  return el;
-	}
+		  if (hidden) {
+		    el.setAttribute('style', 'width:0;height:0;border:0; display:none;');
+		  }
+		  parent.appendChild(el);
+		  installSyncPromptBridge(el);
+		  return el;
+		}
 	
 	function reloadCss(href) {
 	  var links = document.getElementsByTagName("link");
